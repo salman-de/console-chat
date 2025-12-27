@@ -12,14 +12,12 @@
       color: #00ff99;
       font-family: monospace;
     }
-
     #log {
       height: 85vh;
       overflow-y: auto;
       padding: 10px;
       border-bottom: 1px solid #222;
     }
-
     #input {
       width: 100%;
       padding: 14px;
@@ -28,7 +26,6 @@
       border: none;
       outline: none;
       font-family: monospace;
-      font-size: 14px;
     }
   </style>
 </head>
@@ -38,130 +35,49 @@
   <input id="input" placeholder="type and press enter" />
 
   <script>
-    document.addEventListener("DOMContentLoaded", () => {
-      const log = document.getElementById("log");
-      const input = document.getElementById("input");
+    let ws;
+    let connected = false;
 
-      let ws;
+    const log = document.getElementById("log");
+    const input = document.getElementById("input");
 
-      function connect() {
-        const protocol = location.protocol === "https:" ? "wss://" : "ws://";
-        ws = new WebSocket(protocol + location.host);
+    function connect() {
+      if (connected) return;
+      connected = true;
 
-        ws.onopen = () => {
-          log.innerHTML += "<br>> connected";
-        };
+      const protocol = location.protocol === "https:" ? "wss://" : "ws://";
+      ws = new WebSocket(protocol + location.host);
 
-        ws.onmessage = (e) => {
-          log.innerHTML += "<br>> " + e.data;
-          log.scrollTop = log.scrollHeight;
-        };
+      ws.onopen = () => {
+        log.innerHTML += "<br>> connected";
+      };
 
-        ws.onerror = () => {
-          log.innerHTML += "<br>> socket error";
-        };
+      ws.onmessage = (e) => {
+        log.innerHTML += "<br>> " + e.data;
+        log.scrollTop = log.scrollHeight;
+      };
 
-        ws.onclose = () => {
-          log.innerHTML += "<br>> disconnected";
-        };
-      }
+      ws.onclose = () => {
+        log.innerHTML += "<br>> disconnected";
+        connected = false;
+      };
 
-      connect();
+      ws.onerror = () => {
+        log.innerHTML += "<br>> socket error";
+      };
+    }
 
-      input.addEventListener("keydown", (e) => {
-        if (e.key === "Enter" && input.value.trim()) {
-          if (ws.readyState === WebSocket.OPEN) {
-            ws.send(input.value);
-            input.value = "";
-          } else {
-            log.innerHTML += "<br>> not connected";
-          }
+    connect();
+
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && input.value.trim()) {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(input.value);
+          input.value = "";
+        } else {
+          log.innerHTML += "<br>> not connected";
         }
-      });
-    });
-  </script>
-</body>
-</html>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Console Chat</title>
-
-  <style>
-    body {
-      margin: 0;
-      background: #0e0e0e;
-      color: #00ff99;
-      font-family: monospace;
-    }
-
-    #log {
-      height: 85vh;
-      overflow-y: auto;
-      padding: 10px;
-      border-bottom: 1px solid #222;
-    }
-
-    #input {
-      width: 100%;
-      padding: 14px;
-      background: #000;
-      color: #00ff99;
-      border: none;
-      outline: none;
-      font-family: monospace;
-      font-size: 14px;
-    }
-  </style>
-</head>
-
-<body>
-  <div id="log">> loading...</div>
-  <input id="input" placeholder="type and press enter" />
-
-  <script>
-    document.addEventListener("DOMContentLoaded", () => {
-      const log = document.getElementById("log");
-      const input = document.getElementById("input");
-
-      let ws;
-
-      function connect() {
-        const protocol = location.protocol === "https:" ? "wss://" : "ws://";
-        ws = new WebSocket(protocol + location.host);
-
-        ws.onopen = () => {
-          log.innerHTML += "<br>> connected";
-        };
-
-        ws.onmessage = (e) => {
-          log.innerHTML += "<br>> " + e.data;
-          log.scrollTop = log.scrollHeight;
-        };
-
-        ws.onerror = () => {
-          log.innerHTML += "<br>> socket error";
-        };
-
-        ws.onclose = () => {
-          log.innerHTML += "<br>> disconnected";
-        };
       }
-
-      connect();
-
-      input.addEventListener("keydown", (e) => {
-        if (e.key === "Enter" && input.value.trim()) {
-          if (ws.readyState === WebSocket.OPEN) {
-            ws.send(input.value);
-            input.value = "";
-          } else {
-            log.innerHTML += "<br>> not connected";
-          }
-        }
-      });
     });
   </script>
 </body>
