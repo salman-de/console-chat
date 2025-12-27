@@ -1,39 +1,3 @@
-<!DOCTYPE html>
-<html>
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Console</title>
-
-<style>
-body {
-  margin: 0;
-  background: #0e0e0e;
-  color: #00ff99;
-  font-family: monospace;
-}
-#log {
-  height: 85vh;
-  overflow-y: auto;
-  padding: 10px;
-  border-bottom: 1px solid #222;
-}
-#input {
-  width: 100%;
-  padding: 14px;
-  background: #000;
-  color: #00ff99;
-  border: none;
-  outline: none;
-}
-</style>
-</head>
-
-<body>
-
-<div id="log">> loading...</div>
-<input id="input" placeholder="type and press enter">
-
 <script>
 const log = document.getElementById("log");
 const input = document.getElementById("input");
@@ -41,7 +5,8 @@ const input = document.getElementById("input");
 let ws;
 
 function connect() {
-  ws = new WebSocket("ws://192.168.1.7:3000");
+  const protocol = location.protocol === "https:" ? "wss://" : "ws://";
+  ws = new WebSocket(protocol + location.host);
 
   ws.onopen = () => {
     log.innerHTML += "<br>> connected";
@@ -74,6 +39,3 @@ input.addEventListener("keydown", (e) => {
   }
 });
 </script>
-
-</body>
-</html>
