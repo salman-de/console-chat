@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Console</title>
+
+<style>
+body {
+  margin: 0;
+  background: #0e0e0e;
+  color: #00ff99;
+  font-family: monospace;
+}
+#log {
+  height: 85vh;
+  overflow-y: auto;
+  padding: 10px;
+  border-bottom: 1px solid #222;
+}
+#input {
+  width: 100%;
+  padding: 14px;
+  background: #000;
+  color: #00ff99;
+  border: none;
+  outline: none;
+}
+</style>
+</head>
+
+<body>
+
+<div id="log">> loading...</div>
+<input id="input" placeholder="type and press enter">
+
+<script>
+const log = document.getElementById("log");
+const input = document.getElementById("input");
+
+let ws;
+
+function connect() {
+  ws = new WebSocket("ws://192.168.1.7:3000");
+
+  ws.onopen = () => {
+    log.innerHTML += "<br>> connected";
+  };
+
+  ws.onmessage = (e) => {
+    log.innerHTML += "<br>> " + e.data;
+    log.scrollTop = log.scrollHeight;
+  };
+
+  ws.onerror = () => {
+    log.innerHTML += "<br>> socket error";
+  };
+
+  ws.onclose = () => {
+    log.innerHTML += "<br>> disconnected";
+  };
+}
+
+connect();
+
+input.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && input.value.trim()) {
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.send(input.value);
+      input.value = "";
+    } else {
+      log.innerHTML += "<br>> not connected";
+    }
+  }
+});
+</script>
+
+</body>
+</html>
