@@ -38,6 +38,9 @@
     let ws;
     let connected = false;
 
+    // 🔑 unique id per user
+    const myId = Math.random().toString(36).slice(2, 8);
+
     const log = document.getElementById("log");
     const input = document.getElementById("input");
 
@@ -53,7 +56,14 @@
       };
 
       ws.onmessage = (e) => {
-        log.innerHTML += "<br>> " + e.data;
+        const msg = JSON.parse(e.data);
+
+        if (msg.id === myId) {
+          log.innerHTML += `<br><span style="color:#4fc3f7">> you: ${msg.text}</span>`;
+        } else {
+          log.innerHTML += `<br><span style="color:#00ff99">> user: ${msg.text}</span>`;
+        }
+
         log.scrollTop = log.scrollHeight;
       };
 
@@ -72,7 +82,10 @@
     input.addEventListener("keydown", (e) => {
       if (e.key === "Enter" && input.value.trim()) {
         if (ws && ws.readyState === WebSocket.OPEN) {
-          ws.send(input.value);
+          ws.send(JSON.stringify({
+            id: myId,
+            text: input.value
+          }));
           input.value = "";
         } else {
           log.innerHTML += "<br>> not connected";
