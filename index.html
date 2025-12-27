@@ -27,22 +27,40 @@
       outline: none;
       font-family: monospace;
     }
+    #typing {
+      padding: 4px 10px;
+      font-size: 12px;
+      color: #888;
+    }
   </style>
 </head>
 
 <body>
   <div id="log">> loading...</div>
+  <div id="typing"></div>
   <input id="input" placeholder="type and press enter" />
 
   <script>
     let ws;
     let connected = false;
 
-    // 🔑 unique id per user
     const myId = Math.random().toString(36).slice(2, 8);
+    const myName = "User-" + myId;
 
     const log = document.getElementById("log");
     const input = document.getElementById("input");
+    const typingDiv = document.getElementById("typing");
+
+    // 🔔 notification permission
+    if (Notification.permission !== "granted") {
+      Notification.requestPermission();
+    }
+
+    function notify(text) {
+      if (document.hidden && Notification.permission === "granted") {
+        new Notification("Console Chat", { body: text });
+      }
+    }
 
     function connect() {
       if (connected) return;
@@ -58,38 +76,74 @@
       ws.onmessage = (e) => {
         const msg = JSON.parse(e.data);
 
-        if (msg.id === myId) {
-          log.innerHTML += `<br><span style="color:#4fc3f7">> you: ${msg.text}</span>`;
-        } else {
-          log.innerHTML += `<br><span style="color:#00ff99">> user: ${msg.text}</span>`;
+        // 📜 history load
+        if (msg.type === "history") {
+          log.innerHTML = "";
+          msg.data.forEach(m => renderMessage(m));
+          return;
         }
 
-        log.scrollTop = log.scrollHeight;
+        // ✍️ typing
+        if (msg.type === "typing") {
+          typingDiv.textContent = `${msg.user} is typing...`;
+          setTimeout(() => typingDiv.textContent = "", 1000);
+          return;
+        }
+
+        // 👁️ seen
+        if (msg.type === "seen") {
+          log.innerHTML += `<br><span style="color:#888">> seen by ${msg.user}</span>`;
+          return;
+        }
+
+        // 💬 message
+        if (msg.type === "message") {
+          renderMessage(msg);
+          notify(`${msg.user}: ${msg.text}`);
+
+          ws.send(JSON.stringify({
+            type: "seen",
+            user: myName
+          }));
+        }
       };
 
       ws.onclose = () => {
         log.innerHTML += "<br>> disconnected";
         connected = false;
       };
+    }
 
-      ws.onerror = () => {
-        log.innerHTML += "<br>> socket error";
-      };
+    function renderMessage(msg) {
+      const line =
+        msg.user === myName
+          ? `<span style="color:#4fc3f7">> you: ${msg.text}</span>`
+          : `<span>> ${msg.user}: ${msg.text}</span>`;
+
+      log.innerHTML += "<br>" + line;
+      log.scrollTop = log.scrollHeight;
     }
 
     connect();
 
+    // ✍️ typing send
+    input.addEventListener("input", () => {
+      ws.send(JSON.stringify({
+        type: "typing",
+        user: myName
+      }));
+    });
+
+    // 📤 send message
     input.addEventListener("keydown", (e) => {
       if (e.key === "Enter" && input.value.trim()) {
-        if (ws && ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({
-            id: myId,
-            text: input.value
-          }));
-          input.value = "";
-        } else {
-          log.innerHTML += "<br>> not connected";
-        }
+        ws.send(JSON.stringify({
+          type: "message",
+          user: myName,
+          text: input.value,
+          time: Date.now()
+        }));
+        input.value = "";
       }
     });
   </script>
