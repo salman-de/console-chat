@@ -1,19 +1,27 @@
 const http = require("http");
 const fs = require("fs");
+const path = require("path");
 const WebSocket = require("ws");
 
 const server = http.createServer((req, res) => {
-  fs.readFile("index.html", (err, data) => {
-    res.writeHead(200, { "Content-Type": "text/html" });
-    res.end(data);
+  let filePath = path.join(__dirname, "index.html");
+
+  fs.readFile(filePath, (err, content) => {
+    if (err) {
+      res.writeHead(500);
+      res.end("Server error");
+    } else {
+      res.writeHead(200, { "Content-Type": "text/html" });
+      res.end(content);
+    }
   });
 });
 
 const wss = new WebSocket.Server({ server });
 
-wss.on("connection", ws => {
-  ws.on("message", msg => {
-    wss.clients.forEach(client => {
+wss.on("connection", (ws) => {
+  ws.on("message", (msg) => {
+    wss.clients.forEach((client) => {
       if (client.readyState === WebSocket.OPEN) {
         client.send(msg.toString());
       }
@@ -21,6 +29,7 @@ wss.on("connection", ws => {
   });
 });
 
-server.listen(3000, () => {
-  console.log("Server running on http://localhost:3000");
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => {
+  console.log("Server running on port", PORT);
 });
