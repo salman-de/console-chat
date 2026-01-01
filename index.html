@@ -69,6 +69,12 @@
       pointer-events: none;
       transition: opacity 0.15s ease;
     }
+
+    .seen {
+      font-size: 11px;
+      color: #888;
+      margin-left: 6px;
+    }
   </style>
 </head>
 
@@ -123,9 +129,24 @@
           return;
         }
 
+        if (msg.type === "seen") {
+          const seen = document.createElement("div");
+          seen.className = "seen";
+          seen.textContent = `> seen by ${msg.user}`;
+          log.appendChild(seen);
+          log.scrollTop = log.scrollHeight;
+          return;
+        }
+
         if (msg.type === "message") {
           renderMessage(msg);
           notify(`${msg.user}: ${msg.text}`);
+
+          // 👁️ send seen
+          ws.send(JSON.stringify({
+            type: "seen",
+            user: myName
+          }));
         }
       };
 
