@@ -75,6 +75,12 @@
       color: #888;
       margin-left: 6px;
     }
+
+    .info {
+      font-size: 11px;
+      color: #777;
+      margin-left: 4px;
+    }
   </style>
 </head>
 
@@ -88,6 +94,9 @@
     let ws;
     let connected = false;
     let replyTo = null;
+
+    let inactiveAt = null;
+    let disconnectAt = null;
 
     const myId = Math.random().toString(36).slice(2, 8);
     const myName = "User-" + myId;
@@ -107,12 +116,27 @@
       }
     }
 
+    function addInfo(text) {
+      const info = document.createElement("div");
+      info.className = "info";
+      info.textContent = `[INFO] ${text}`;
+      log.appendChild(info);
+      log.scrollTop = log.scrollHeight;
+    }
+
     function connect() {
       if (connected) return;
       connected = true;
 
       const protocol = location.protocol === "https:" ? "wss://" : "ws://";
       ws = new WebSocket(protocol + location.host);
+
+      ws.onopen = () => {
+        if (disconnectAt && Date.now() - disconnectAt < 3000) {
+          addInfo("A user reconnected (possible refresh)");
+        }
+        disconnectAt = null;
+      };
 
       ws.onmessage = (e) => {
         const msg = JSON.parse(e.data);
@@ -142,7 +166,6 @@
           renderMessage(msg);
           notify(`${msg.user}: ${msg.text}`);
 
-          // 👁️ send seen
           ws.send(JSON.stringify({
             type: "seen",
             user: myName
@@ -152,6 +175,8 @@
 
       ws.onclose = () => {
         connected = false;
+        disconnectAt = Date.now();
+        addInfo("A user disconnected");
       };
     }
 
@@ -185,10 +210,8 @@
       content.innerHTML = html;
       div.appendChild(content);
 
-      // desktop click
       div.onclick = () => activateReply(msg);
 
-      // mobile swipe
       let startX = 0;
       let currentX = 0;
 
@@ -221,6 +244,16 @@
       log.appendChild(div);
       log.scrollTop = log.scrollHeight;
     }
+
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) {
+        inactiveAt = Date.now();
+      } else if (inactiveAt) {
+        const sec = Math.round((Date.now() - inactiveAt) / 1000);
+        addInfo(`A user was inactive for ~${sec}s`);
+        inactiveAt = null;
+      }
+    });
 
     connect();
 
