@@ -34,8 +34,24 @@
       color: #888;
     }
 
+    /* 🔹 input row */
+    #inputRow {
+      display: flex;
+      align-items: center;
+      border-top: 1px solid #222;
+    }
+
+    #emojiBtn {
+      background: #000;
+      color: #00ff99;
+      border: none;
+      font-size: 20px;
+      padding: 0 12px;
+      cursor: pointer;
+    }
+
     #input {
-      width: 100%;
+      flex: 1;
       padding: 14px;
       background: #000;
       color: #00ff99;
@@ -50,15 +66,12 @@
       transition: transform 0.2s ease;
     }
 
-    /* ✅ UPDATED: Reply highlight */
     .quote {
-      color: #ffffff;
+      color: #888;
       font-size: 12px;
-      font-weight: bold;
-      background: #1a1a1a;
-      border-left: 3px solid #00ff99;
-      padding: 4px 6px;
-      margin-bottom: 4px;
+      border-left: 2px solid #444;
+      padding-left: 6px;
+      margin-bottom: 2px;
     }
 
     .reply-icon {
@@ -72,18 +85,6 @@
       pointer-events: none;
       transition: opacity 0.15s ease;
     }
-
-    .seen {
-      font-size: 11px;
-      color: #888;
-      margin-left: 6px;
-    }
-
-    .info {
-      font-size: 11px;
-      color: #777;
-      margin-left: 4px;
-    }
   </style>
 </head>
 
@@ -91,15 +92,17 @@
   <div id="log">> loading...</div>
   <div id="replyBox"></div>
   <div id="typing"></div>
-  <input id="input" placeholder="type and press enter" />
+
+  <!-- 🔹 INPUT + EMOJI -->
+  <div id="inputRow">
+    <button id="emojiBtn">😊</button>
+    <input id="input" placeholder="type and press enter" />
+  </div>
 
   <script>
     let ws;
     let connected = false;
     let replyTo = null;
-
-    let inactiveAt = null;
-    let disconnectAt = null;
 
     const myId = Math.random().toString(36).slice(2, 8);
     const myName = "User-" + myId;
@@ -108,6 +111,7 @@
     const input = document.getElementById("input");
     const typingDiv = document.getElementById("typing");
     const replyBox = document.getElementById("replyBox");
+    const emojiBtn = document.getElementById("emojiBtn");
 
     if (Notification.permission !== "granted") {
       Notification.requestPermission();
@@ -119,27 +123,12 @@
       }
     }
 
-    function addInfo(text) {
-      const info = document.createElement("div");
-      info.className = "info";
-      info.textContent = `[INFO] ${text}`;
-      log.appendChild(info);
-      log.scrollTop = log.scrollHeight;
-    }
-
     function connect() {
       if (connected) return;
       connected = true;
 
       const protocol = location.protocol === "https:" ? "wss://" : "ws://";
       ws = new WebSocket(protocol + location.host);
-
-      ws.onopen = () => {
-        if (disconnectAt && Date.now() - disconnectAt < 3000) {
-          addInfo("A user reconnected (possible refresh)");
-        }
-        disconnectAt = null;
-      };
 
       ws.onmessage = (e) => {
         const msg = JSON.parse(e.data);
@@ -156,30 +145,14 @@
           return;
         }
 
-        if (msg.type === "seen") {
-          const seen = document.createElement("div");
-          seen.className = "seen";
-          seen.textContent = `> seen by ${msg.user}`;
-          log.appendChild(seen);
-          log.scrollTop = log.scrollHeight;
-          return;
-        }
-
         if (msg.type === "message") {
           renderMessage(msg);
           notify(`${msg.user}: ${msg.text}`);
-
-          ws.send(JSON.stringify({
-            type: "seen",
-            user: myName
-          }));
         }
       };
 
       ws.onclose = () => {
         connected = false;
-        disconnectAt = Date.now();
-        addInfo("A user disconnected");
       };
     }
 
@@ -248,17 +221,12 @@
       log.scrollTop = log.scrollHeight;
     }
 
-    document.addEventListener("visibilitychange", () => {
-      if (document.hidden) {
-        inactiveAt = Date.now();
-      } else if (inactiveAt) {
-        const sec = Math.round((Date.now() - inactiveAt) / 1000);
-        addInfo(`A user was inactive for ~${sec}s`);
-        inactiveAt = null;
-      }
-    });
-
     connect();
+
+    // 🔹 emoji button → native emoji keyboard
+    emojiBtn.onclick = () => {
+      input.focus();
+    };
 
     input.addEventListener("input", () => {
       ws.send(JSON.stringify({ type: "typing", user: myName }));
