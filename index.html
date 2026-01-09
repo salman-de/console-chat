@@ -83,6 +83,11 @@ body {
   display: none;
   z-index: 999;
 }
+.status {
+  font-size: 11px;
+  margin-left: 6px;
+  color: #888;
+}
 </style>
 </head>
 
@@ -112,16 +117,17 @@ const input = document.getElementById("input");
 const typingDiv = document.getElementById("typing");
 const replyBox = document.getElementById("replyBox");
 
+/* Notifications */
 if (Notification.permission !== "granted") {
   Notification.requestPermission();
 }
-
 function notify(text) {
   if (document.hidden && Notification.permission === "granted") {
     new Notification("Console Chat", { body: text });
   }
 }
 
+/* WebSocket */
 function connect() {
   if (connected) return;
   connected = true;
@@ -147,6 +153,31 @@ function connect() {
     if (msg.type === "message") {
       renderMessage(msg);
       notify(`${msg.user}: ${msg.text}`);
+
+      // delivered signal (receiver side)
+      if (msg.user !== myName) {
+        ws.send(JSON.stringify({
+          type: "delivered",
+          id: msg.id,
+          from: myName
+        }));
+      }
+      return;
+    }
+
+    if (msg.type === "delivered") {
+      const el = document.getElementById("status-" + msg.id);
+      if (el) el.textContent = "✓✓";
+      return;
+    }
+
+    if (msg.type === "seen") {
+      const el = document.getElementById("status-" + msg.id);
+      if (el) {
+        el.textContent = "✓✓";
+        el.style.color = "#4fc3f7"; // blue
+      }
+      return;
     }
   };
 
@@ -174,23 +205,30 @@ function renderMessage(msg) {
     html += `<div class="quote">↪ ${msg.replyTo.user}: ${msg.replyTo.text}</div>`;
   }
 
-  html += msg.user === myName
-    ? `<span style="color:#4fc3f7">> you: ${msg.text}</span>`
-    : `<span>> ${msg.user}: ${msg.text}</span>`;
-
   const content = document.createElement("div");
-  content.innerHTML = html;
-  div.appendChild(content);
+  content.innerHTML =
+    msg.user === myName
+      ? `<span style="color:#4fc3f7">> you: ${msg.text}</span>`
+      : `<span>> ${msg.user}: ${msg.text}</span>`;
 
+  // status (only for my messages)
+  if (msg.user === myName) {
+    const status = document.createElement("span");
+    status.className = "status";
+    status.id = "status-" + msg.id;
+    status.textContent = "✓"; // sent
+    content.appendChild(status);
+  }
+
+  div.appendChild(content);
   div.onclick = () => activateReply(msg);
 
-  // Mobile swipe reply
+  // swipe reply (mobile)
   let startX = 0, currentX = 0;
   div.addEventListener("touchstart", e => {
     startX = e.touches[0].clientX;
     div.style.transition = "none";
   });
-
   div.addEventListener("touchmove", e => {
     currentX = e.touches[0].clientX - startX;
     if (currentX > 0) {
@@ -198,7 +236,6 @@ function renderMessage(msg) {
       icon.style.opacity = Math.min(currentX / 80, 1);
     }
   });
-
   div.addEventListener("touchend", () => {
     div.style.transition = "transform 0.2s ease";
     div.style.transform = "translateX(0)";
@@ -209,18 +246,30 @@ function renderMessage(msg) {
 
   log.appendChild(div);
   log.scrollTop = log.scrollHeight;
+
+  // seen signal (receiver side)
+  if (msg.user !== myName) {
+    ws.send(JSON.stringify({
+      type: "seen",
+      id: msg.id,
+      from: myName
+    }));
+  }
 }
 
 connect();
 
+/* typing */
 input.addEventListener("input", () => {
   ws.send(JSON.stringify({ type: "typing", user: myName }));
 });
 
+/* send message */
 input.addEventListener("keydown", e => {
   if (e.key === "Enter" && input.value.trim()) {
     ws.send(JSON.stringify({
       type: "message",
+      id: Date.now() + "-" + myId,
       user: myName,
       text: input.value,
       time: Date.now(),
@@ -232,7 +281,7 @@ input.addEventListener("keydown", e => {
   }
 });
 
-/* EMOJI PICKER */
+/* Emoji Picker */
 const emojiBtn = document.getElementById("emojiBtn");
 const pickerDiv = document.getElementById("emojiPicker");
 
