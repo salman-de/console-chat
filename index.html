@@ -4,122 +4,216 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Console Chat</title>
+
 <style>
 body{margin:0;background:#0e0e0e;color:#00ff99;font-family:monospace}
 #status{padding:6px 10px;font-size:12px;background:#300;color:#ff6b6b}
 #log{height:78vh;overflow:auto;padding:10px;border-bottom:1px solid #222}
-.msg{margin-bottom:10px}
-.quote{font-size:12px;background:#1a1a1a;border-left:3px solid #00ff99;padding:4px}
-.reacts span{cursor:pointer;margin-right:6px}
+.msg{margin-bottom:14px;position:relative}
+.quote{font-size:12px;background:#1a1a1a;border-left:3px solid #00ff99;padding:4px;margin-bottom:4px}
+.reacts{margin-top:4px;font-size:14px}
+.reacts span{margin-right:8px}
 img{max-width:200px;border-radius:6px;margin-top:4px}
 .small{font-size:11px;color:#888;cursor:pointer}
+
 input,button{background:#000;color:#00ff99;border:none;padding:10px}
+
+/* reaction picker */
+#picker{
+ display:none;
+ position:fixed;
+ bottom:90px;
+ left:50%;
+ transform:translateX(-50%);
+ background:#111;
+ padding:10px;
+ border-radius:12px;
+ animation:pop .15s ease-out;
+ z-index:999;
+}
+#picker span{
+ font-size:26px;
+ margin:8px;
+ cursor:pointer;
+}
+
+/* reaction animation */
+.react-float{
+ position:absolute;
+ bottom:20px;
+ left:20px;
+ font-size:22px;
+ animation:floatUp .6s ease-out forwards;
+}
+
+@keyframes pop{
+ from{transform:translateX(-50%) scale(.6);opacity:0}
+ to{transform:translateX(-50%) scale(1);opacity:1}
+}
+@keyframes floatUp{
+ from{opacity:1;transform:translateY(0)}
+ to{opacity:0;transform:translateY(-25px)}
+}
 </style>
 </head>
 
 <body>
+
 <div id="status">● Offline</div>
 <div id="log"></div>
-<div id="reply"></div>
-<div id="typing"></div>
 
 <div>
-<button id="emoji">😊</button>
 <button id="fileBtn">📎</button>
 <input type="file" id="file" hidden>
 <input id="text" placeholder="type & enter">
 </div>
 
-<div id="emojiPanel" style="display:none">😀 😂 😊 😍 😘 😎 😢 😡 👍 ❤️ 🔥</div>
+<!-- reaction picker (mobile long-press only) -->
+<div id="picker">
+ 👍 ❤️ 😘 🤣 😁 🥰 🫡
+</div>
 
 <script>
 const ws=new WebSocket((location.protocol==="https:"?"wss://":"ws://")+location.host);
-const log=document.getElementById("log"),text=document.getElementById("text");
-const status=document.getElementById("status"),typing=document.getElementById("typing");
-const emojiPanel=document.getElementById("emojiPanel");
-const myId=Math.random().toString(36).slice(2,8),me="User-"+myId;
-let replyTo=null;
+const log=document.getElementById("log");
+const text=document.getElementById("text");
+const status=document.getElementById("status");
+const picker=document.getElementById("picker");
+
+const myId=Math.random().toString(36).slice(2,8);
+const me="User-"+myId;
+let reactTarget=null, longPressTimer=null;
 
 ws.onopen=()=>{status.textContent="● Online";status.style.background="#002b1a";}
 ws.onclose=()=>{status.textContent="● Offline";status.style.background="#300";}
 
 ws.onmessage=e=>{
  const m=JSON.parse(e.data);
- if(m.type==="history") log.innerHTML="",m.data.forEach(draw);
+ if(m.type==="history"){log.innerHTML="";m.data.forEach(draw);}
  if(m.type==="message") draw(m);
  if(m.type==="reaction") updateReacts(m);
- if(m.type==="presence" && m.user!==me){
-  typing.textContent=m.state==="online"?`${m.user} online`:`${m.user} last seen`;
- }
+ if(m.type==="delete"){const el=document.getElementById("w-"+m.id);if(el)el.remove();}
 };
 
 function draw(m){
- const d=document.createElement("div");d.id="w-"+m.id;d.className="msg";
- if(m.replyTo)d.innerHTML+=`<div class=quote>${m.replyTo.user}: ${m.replyTo.text}</div>`;
- if(m.file && m.file.startsWith("data:image"))
-   d.innerHTML+=`<img src="${m.file}">`;
- else if(m.file)
-   d.innerHTML+=`<a href="${m.file}" target=_blank>${m.filename}</a>`;
- else d.innerHTML+=`${m.user}: ${m.text}`;
+ const d=document.createElement("div");
+ d.id="w-"+m.id;
+ d.className="msg";
 
- d.innerHTML+=`<div class="reacts" id="r-${m.id}">
-   <span onclick="react('${m.id}','👍')">👍</span>
-   <span onclick="react('${m.id}','❤️')">❤️</span>
-   <span onclick="react('${m.id}','😘')">😘</span>
- </div>`;
+ if(m.replyTo){
+  const q=document.createElement("div");
+  q.className="quote";
+  q.textContent=`↪ ${m.replyTo.user}: ${m.replyTo.text}`;
+  d.appendChild(q);
+ }
 
- if(m.user===me)
-   d.innerHTML+=`<span class=small onclick="del('${m.id}')"> 🗑️</span>`;
+ const c=document.createElement("div");
+ c.textContent=`${m.user}: ${m.text||""}`;
+ d.appendChild(c);
 
- log.appendChild(d); log.scrollTop=log.scrollHeight;
-}
+ if(m.file && m.file.startsWith("data:image")){
+  const img=document.createElement("img");
+  img.src=m.file;
+  d.appendChild(img);
+ }
 
-function react(id,emoji){
- ws.send(JSON.stringify({type:"reaction",id,emoji,user:me}));
+ const r=document.createElement("div");
+ r.className="reacts";
+ r.id="r-"+m.id;
+ d.appendChild(r);
+
+ // 🗑️ delete (own msg)
+ if(m.user===me){
+  const del=document.createElement("span");
+  del.textContent=" 🗑️";
+  del.className="small";
+  del.onclick=e=>{e.stopPropagation();ws.send(JSON.stringify({type:"delete",id:m.id}))};
+  d.appendChild(del);
+ }
+
+ // 📱 MOBILE LONG-PRESS FOR REACTION
+ d.addEventListener("touchstart",()=>{
+  longPressTimer=setTimeout(()=>{
+   reactTarget=m.id;
+   picker.style.display="block";
+  },500);
+ });
+ d.addEventListener("touchend",()=>clearTimeout(longPressTimer));
+
+ log.appendChild(d);
+ log.scrollTop=log.scrollHeight;
+ updateReacts(m);
 }
 
 function updateReacts(m){
  const r=document.getElementById("r-"+m.id);
- if(!r||!m.reactions)return;
- r.innerHTML="";
- Object.entries(m.reactions).forEach(([e,u])=>{
-  if(u.length) r.innerHTML+=`${e} ${u.length} `;
+ if(!r||!m.reactions) return;
+
+ let html="";
+ Object.entries(m.reactions).forEach(([emoji,users])=>{
+  if(users.length) html+=`${emoji} ${users.length} `;
  });
+
+ r.innerHTML=html;
+ r.style.display=html?"block":"none";
 }
 
-function del(id){ws.send(JSON.stringify({type:"delete",id}))}
+// 🎯 REACTION PICK
+picker.onclick=e=>{
+ const emoji=e.target.textContent.trim();
+ if(!emoji||!reactTarget) return;
 
+ ws.send(JSON.stringify({
+  type:"reaction",
+  id:reactTarget,
+  emoji,
+  user:me
+ }));
+
+ // ✨ animation
+ const target=document.getElementById("w-"+reactTarget);
+ const anim=document.createElement("div");
+ anim.className="react-float";
+ anim.textContent=emoji;
+ target.appendChild(anim);
+ setTimeout(()=>anim.remove(),600);
+
+ picker.style.display="none";
+ reactTarget=null;
+};
+
+// send msg
 text.onkeydown=e=>{
- if(e.key==="Enter"&&text.value){
+ if(e.key==="Enter" && text.value){
   ws.send(JSON.stringify({
-   type:"message",id:Date.now()+"-"+myId,user:me,text:text.value,replyTo
+   type:"message",
+   id:Date.now()+"-"+myId,
+   user:me,
+   text:text.value
   }));
-  text.value="";replyTo=null;
+  text.value="";
  }
 };
 
-emoji.onclick=()=>emojiPanel.style.display=
- emojiPanel.style.display==="none"?"block":"none";
-
-emojiPanel.onclick=e=>{
- if(e.target.textContent){text.value+=e.target.textContent;}
-};
-
+// file
 fileBtn.onclick=()=>file.click();
 file.onchange=()=>{
  const r=new FileReader();
  r.onload=()=>ws.send(JSON.stringify({
-  type:"message",id:Date.now()+"-"+myId,user:me,
-  file:r.result,filename:file.files[0].name
+  type:"message",
+  id:Date.now()+"-"+myId,
+  user:me,
+  file:r.result,
+  filename:file.files[0].name
  }));
  r.readAsDataURL(file.files[0]);
 };
 
-document.addEventListener("visibilitychange",()=>{
- ws.send(JSON.stringify({
-  type:"presence",user:me,state:document.hidden?"offline":"online"
- }));
+// hide picker on outside tap
+document.addEventListener("touchstart",e=>{
+ if(!picker.contains(e.target)) picker.style.display="none";
 });
 </script>
+
 </body>
 </html>
