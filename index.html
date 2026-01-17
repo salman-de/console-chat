@@ -9,16 +9,36 @@
 body{margin:0;background:#0e0e0e;color:#00ff99;font-family:monospace}
 #status{padding:6px 10px;font-size:12px;background:#300;color:#ff6b6b}
 #log{height:78vh;overflow:auto;padding:10px;border-bottom:1px solid #222}
-.msg{margin-bottom:14px;position:relative}
+
+.msg{margin-bottom:16px;position:relative}
 .quote{font-size:12px;background:#1a1a1a;border-left:3px solid #00ff99;padding:4px;margin-bottom:4px}
 .reacts{margin-top:4px;font-size:14px}
 .reacts span{margin-right:8px}
+
 img{max-width:200px;border-radius:6px;margin-top:4px}
 .small{font-size:11px;color:#888;cursor:pointer}
 
 input,button{background:#000;color:#00ff99;border:none;padding:10px}
 
-/* reaction picker */
+/* PC hover reaction strip */
+.hover-bar{
+ position:absolute;
+ top:-42px;
+ left:0;
+ background:#111;
+ padding:6px 10px;
+ border-radius:20px;
+ display:none;
+ gap:10px;
+ animation:pop .15s ease-out;
+ z-index:10;
+}
+.hover-bar span{
+ font-size:20px;
+ cursor:pointer;
+}
+
+/* mobile picker */
 #picker{
  display:none;
  position:fixed;
@@ -27,17 +47,12 @@ input,button{background:#000;color:#00ff99;border:none;padding:10px}
  transform:translateX(-50%);
  background:#111;
  padding:10px;
- border-radius:12px;
- animation:pop .15s ease-out;
+ border-radius:14px;
  z-index:999;
 }
-#picker span{
- font-size:26px;
- margin:8px;
- cursor:pointer;
-}
+#picker span{font-size:26px;margin:8px;cursor:pointer}
 
-/* reaction animation */
+/* animation */
 .react-float{
  position:absolute;
  bottom:20px;
@@ -47,8 +62,8 @@ input,button{background:#000;color:#00ff99;border:none;padding:10px}
 }
 
 @keyframes pop{
- from{transform:translateX(-50%) scale(.6);opacity:0}
- to{transform:translateX(-50%) scale(1);opacity:1}
+ from{transform:scale(.6);opacity:0}
+ to{transform:scale(1);opacity:1}
 }
 @keyframes floatUp{
  from{opacity:1;transform:translateY(0)}
@@ -68,10 +83,8 @@ input,button{background:#000;color:#00ff99;border:none;padding:10px}
 <input id="text" placeholder="type & enter">
 </div>
 
-<!-- reaction picker (mobile long-press only) -->
-<div id="picker">
- 👍 ❤️ 😘 🤣 😁 🥰 🫡
-</div>
+<!-- mobile picker -->
+<div id="picker">👍 ❤️ 😘 🤣 😁 🥰 🫡</div>
 
 <script>
 const ws=new WebSocket((location.protocol==="https:"?"wss://":"ws://")+location.host);
@@ -82,7 +95,9 @@ const picker=document.getElementById("picker");
 
 const myId=Math.random().toString(36).slice(2,8);
 const me="User-"+myId;
-let reactTarget=null, longPressTimer=null;
+
+let reactTarget=null;
+let longPressTimer=null;
 
 ws.onopen=()=>{status.textContent="● Online";status.style.background="#002b1a";}
 ws.onclose=()=>{status.textContent="● Offline";status.style.background="#300";}
@@ -92,13 +107,16 @@ ws.onmessage=e=>{
  if(m.type==="history"){log.innerHTML="";m.data.forEach(draw);}
  if(m.type==="message") draw(m);
  if(m.type==="reaction") updateReacts(m);
- if(m.type==="delete"){const el=document.getElementById("w-"+m.id);if(el)el.remove();}
+ if(m.type==="delete"){
+  const el=document.getElementById("w-"+m.id);
+  if(el) el.remove();
+ }
 };
 
 function draw(m){
  const d=document.createElement("div");
- d.id="w-"+m.id;
  d.className="msg";
+ d.id="w-"+m.id;
 
  if(m.replyTo){
   const q=document.createElement("div");
@@ -107,9 +125,9 @@ function draw(m){
   d.appendChild(q);
  }
 
- const c=document.createElement("div");
- c.textContent=`${m.user}: ${m.text||""}`;
- d.appendChild(c);
+ const content=document.createElement("div");
+ content.textContent=`${m.user}: ${m.text||""}`;
+ d.appendChild(content);
 
  if(m.file && m.file.startsWith("data:image")){
   const img=document.createElement("img");
@@ -117,21 +135,44 @@ function draw(m){
   d.appendChild(img);
  }
 
+ /* reactions display */
  const r=document.createElement("div");
  r.className="reacts";
  r.id="r-"+m.id;
  d.appendChild(r);
 
- // 🗑️ delete (own msg)
+ /* delete (own msg) */
  if(m.user===me){
   const del=document.createElement("span");
   del.textContent=" 🗑️";
   del.className="small";
-  del.onclick=e=>{e.stopPropagation();ws.send(JSON.stringify({type:"delete",id:m.id}))};
+  del.onclick=e=>{
+   e.stopPropagation();
+   ws.send(JSON.stringify({type:"delete",id:m.id}));
+  };
   d.appendChild(del);
  }
 
- // 📱 MOBILE LONG-PRESS FOR REACTION
+ /* PC HOVER BAR */
+ const hover=document.createElement("div");
+ hover.className="hover-bar";
+ hover.innerHTML="👍 ❤️ 😘 🤣 😁 🥰 🫡";
+ d.appendChild(hover);
+
+ d.addEventListener("mouseenter",()=>{
+  if(window.innerWidth>768) hover.style.display="flex";
+ });
+ d.addEventListener("mouseleave",()=>{
+  hover.style.display="none";
+ });
+
+ hover.onclick=e=>{
+  const emoji=e.target.textContent;
+  if(!emoji) return;
+  sendReaction(m.id,emoji,d);
+ };
+
+ /* MOBILE LONG PRESS */
  d.addEventListener("touchstart",()=>{
   longPressTimer=setTimeout(()=>{
    reactTarget=m.id;
@@ -145,44 +186,46 @@ function draw(m){
  updateReacts(m);
 }
 
+function sendReaction(id,emoji,box){
+ ws.send(JSON.stringify({
+  type:"reaction",
+  id,
+  emoji,
+  user:me
+ }));
+
+ // animation
+ const anim=document.createElement("div");
+ anim.className="react-float";
+ anim.textContent=emoji;
+ box.appendChild(anim);
+ setTimeout(()=>anim.remove(),600);
+}
+
 function updateReacts(m){
  const r=document.getElementById("r-"+m.id);
- if(!r||!m.reactions) return;
+ if(!r || !m.reactions) return;
 
  let html="";
- Object.entries(m.reactions).forEach(([emoji,users])=>{
-  if(users.length) html+=`${emoji} ${users.length} `;
+ Object.entries(m.reactions).forEach(([e,u])=>{
+  if(u.length) html+=`${e} ${u.length} `;
  });
 
  r.innerHTML=html;
  r.style.display=html?"block":"none";
 }
 
-// 🎯 REACTION PICK
+/* mobile picker click */
 picker.onclick=e=>{
- const emoji=e.target.textContent.trim();
+ const emoji=e.target.textContent;
  if(!emoji||!reactTarget) return;
-
- ws.send(JSON.stringify({
-  type:"reaction",
-  id:reactTarget,
-  emoji,
-  user:me
- }));
-
- // ✨ animation
- const target=document.getElementById("w-"+reactTarget);
- const anim=document.createElement("div");
- anim.className="react-float";
- anim.textContent=emoji;
- target.appendChild(anim);
- setTimeout(()=>anim.remove(),600);
-
+ const box=document.getElementById("w-"+reactTarget);
+ sendReaction(reactTarget,emoji,box);
  picker.style.display="none";
  reactTarget=null;
 };
 
-// send msg
+/* send msg */
 text.onkeydown=e=>{
  if(e.key==="Enter" && text.value){
   ws.send(JSON.stringify({
@@ -195,7 +238,7 @@ text.onkeydown=e=>{
  }
 };
 
-// file
+/* file */
 fileBtn.onclick=()=>file.click();
 file.onchange=()=>{
  const r=new FileReader();
@@ -209,7 +252,7 @@ file.onchange=()=>{
  r.readAsDataURL(file.files[0]);
 };
 
-// hide picker on outside tap
+/* hide mobile picker */
 document.addEventListener("touchstart",e=>{
  if(!picker.contains(e.target)) picker.style.display="none";
 });
