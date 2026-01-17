@@ -4,88 +4,56 @@ const path = require("path");
 const WebSocket = require("ws");
 
 const DATA_FILE = path.join(__dirname, "messages.json");
+if (!fs.existsSync(DATA_FILE)) fs.writeFileSync(DATA_FILE, "[]");
 
-if (!fs.existsSync(DATA_FILE)) {
-  fs.writeFileSync(DATA_FILE, "[]");
-}
-
-let messages = [];
-try {
-  messages = JSON.parse(fs.readFileSync(DATA_FILE, "utf-8"));
-} catch {
-  messages = [];
-}
+let messages = JSON.parse(fs.readFileSync(DATA_FILE, "utf-8") || "[]");
 
 const server = http.createServer((req, res) => {
-  fs.readFile(path.join(__dirname, "index.html"), (err, content) => {
-    if (err) {
-      res.writeHead(500);
-      res.end("Server error");
-      return;
-    }
+  fs.readFile("index.html", (_, data) => {
     res.writeHead(200, { "Content-Type": "text/html" });
-    res.end(content);
+    res.end(data);
   });
 });
 
 const wss = new WebSocket.Server({ server });
 
-wss.on("connection", (ws) => {
+wss.on("connection", ws => {
   ws.send(JSON.stringify({ type: "history", data: messages }));
 
-  ws.on("message", (raw) => {
+  ws.on("message", raw => {
     let data;
-    try { data = JSON.parse(raw.toString()); } catch { return; }
+    try { data = JSON.parse(raw); } catch { return; }
 
-    // typing
-    if (data.type === "typing") {
-      wss.clients.forEach(c => {
-        if (c !== ws && c.readyState === WebSocket.OPEN) {
-          c.send(JSON.stringify(data));
-        }
-      });
+    if (["typing","seen","presence"].includes(data.type)) {
+      wss.clients.forEach(c=>c.readyState===1 && c.send(JSON.stringify(data)));
       return;
     }
 
-    // seen
-    if (data.type === "seen") {
-      wss.clients.forEach(c => {
-        if (c.readyState === WebSocket.OPEN) {
-          c.send(JSON.stringify(data));
-        }
-      });
-      return;
-    }
-
-    // edit
     if (data.type === "edit") {
-      const i = messages.findIndex(m => m.id === data.id);
-      if (i !== -1) {
-        messages[i].text = data.text;
-        fs.writeFileSync(DATA_FILE, JSON.stringify(messages, null, 2));
-      }
-      wss.clients.forEach(c => c.readyState === 1 && c.send(JSON.stringify(data)));
-      return;
+      const m = messages.find(x=>x.id===data.id);
+      if (m) m.text = data.text;
     }
 
-    // 🗑️ DELETE (FIXED)
     if (data.type === "delete") {
-      messages = messages.filter(m => m.id !== data.id);
-      fs.writeFileSync(DATA_FILE, JSON.stringify(messages, null, 2));
-      wss.clients.forEach(c => c.readyState === 1 && c.send(JSON.stringify(data)));
-      return;
+      messages = messages.filter(m=>m.id!==data.id);
     }
 
-    // message
-    if (data.type === "message") {
-      messages.push(data);
-      fs.writeFileSync(DATA_FILE, JSON.stringify(messages, null, 2));
-      wss.clients.forEach(c => c.readyState === 1 && c.send(JSON.stringify(data)));
+    if (data.type === "reaction") {
+      const m = messages.find(x=>x.id===data.id);
+      if (m) {
+        m.reactions ??= {};
+        m.reactions[data.emoji] ??= [];
+        const i = m.reactions[data.emoji].indexOf(data.user);
+        i === -1 ? m.reactions[data.emoji].push(data.user)
+                 : m.reactions[data.emoji].splice(i,1);
+      }
     }
+
+    if (data.type === "message") messages.push(data);
+
+    fs.writeFileSync(DATA_FILE, JSON.stringify(messages,null,2));
+    wss.clients.forEach(c=>c.readyState===1 && c.send(JSON.stringify(data)));
   });
 });
 
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-  console.log("Server running on port", PORT);
-});
+server.listen(process.env.PORT||3000);
