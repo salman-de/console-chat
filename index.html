@@ -23,6 +23,7 @@ body{margin:0;background:#0e0e0e;color:#00ff99;font-family:monospace}
 .edit{color:#ffd700;cursor:pointer;margin-left:6px}
 .delete{color:#ff6b6b;cursor:pointer;margin-left:6px}
 .file-link{color:#4fc3f7;text-decoration:underline}
+.img-preview{max-width:200px;border-radius:6px;margin-top:4px;display:block}
 #emojiPicker{position:absolute;bottom:60px;left:10px;display:none;z-index:999}
 </style>
 </head>
@@ -94,6 +95,9 @@ function activateReply(msg){
 function renderMessage(msg){
  const wrap=document.createElement("div");
  wrap.id="wrap-"+msg.id;
+ wrap.className="msg";
+
+ let longPressTimer=null;
 
  if(msg.replyTo){
   const q=document.createElement("div");
@@ -104,14 +108,38 @@ function renderMessage(msg){
 
  const content=document.createElement("div");
  content.id="msg-"+msg.id;
- content.innerHTML= msg.file
-   ? `> ${msg.user}: <a class="file-link" href="${msg.file}" target="_blank">${msg.filename}</a>`
-   : (msg.user===myName?`<span style="color:#4fc3f7">> you: ${msg.text}</span>`:`> ${msg.user}: ${msg.text}`);
+
+ // 🖼️ IMAGE PREVIEW
+ if(msg.file && msg.file.startsWith("data:image")){
+   content.innerHTML=`> ${msg.user}:<br>
+     <a href="${msg.file}" target="_blank">
+       <img src="${msg.file}" class="img-preview">
+     </a>`;
+ } else if(msg.file){
+   content.innerHTML=`> ${msg.user}: <a class="file-link" href="${msg.file}" target="_blank">${msg.filename}</a>`;
+ } else {
+   content.innerHTML= msg.user===myName
+     ? `<span style="color:#4fc3f7">> you: ${msg.text}</span>`
+     : `> ${msg.user}: ${msg.text}`;
+ }
+
+ // allow link click
+ content.querySelectorAll("a").forEach(a=>{
+   a.onclick=e=>e.stopPropagation();
+ });
 
  if(msg.user===myName){
   const s=document.createElement("span"); s.id="status-"+msg.id; s.className="status"; s.textContent="✓"; content.appendChild(s);
-  const e=document.createElement("span"); e.textContent=" ✏️"; e.className="edit"; e.onclick=()=>{input.value=msg.text; editId=msg.id;}; content.appendChild(e);
+  const e=document.createElement("span"); e.textContent=" ✏️"; e.className="edit"; e.onclick=()=>{input.value=msg.text||""; editId=msg.id;}; content.appendChild(e);
   const d=document.createElement("span"); d.textContent=" 🗑️"; d.className="delete"; d.onclick=()=>ws.send(JSON.stringify({type:"delete",id:msg.id})); content.appendChild(d);
+
+  // 📱 long press delete
+  wrap.addEventListener("touchstart",()=>{
+    longPressTimer=setTimeout(()=>{
+      ws.send(JSON.stringify({type:"delete",id:msg.id}));
+    },600);
+  });
+  wrap.addEventListener("touchend",()=>clearTimeout(longPressTimer));
  }
 
  content.onclick=()=>activateReply(msg);
@@ -172,7 +200,6 @@ emojiBtn.onclick=(e)=>{
  emojiPicker.style.display=emojiPicker.style.display==="none"?"block":"none";
 };
 
-/* hide emoji picker on outside click */
 document.addEventListener("click",(e)=>{
  if(!emojiPicker.contains(e.target) && e.target!==emojiBtn){
   emojiPicker.style.display="none";
