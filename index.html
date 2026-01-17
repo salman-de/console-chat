@@ -1,211 +1,124 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Console Chat</title>
 
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/emoji-mart@latest/css/emoji-mart.css">
-<script src="https://cdn.jsdelivr.net/npm/emoji-mart@latest/dist/browser.js"></script>
-
 <style>
 body{margin:0;background:#0e0e0e;color:#00ff99;font-family:monospace}
-#statusBadge{padding:6px 10px;font-size:12px;background:#300;color:#ff6b6b}
-#log{height:78vh;overflow-y:auto;padding:10px;border-bottom:1px solid #222}
-#replyBox{padding:6px 10px;font-size:12px;color:#ccc;background:#111;display:none}
-#typing{padding:4px 10px;font-size:12px;color:#888}
-.input-wrap{display:flex;align-items:center;background:#000}
-#emojiBtn,#fileBtn{background:none;border:none;font-size:20px;padding:10px;cursor:pointer}
-#input{flex:1;padding:14px;background:#000;color:#00ff99;border:none;outline:none}
-.msg{margin-bottom:6px}
-.quote{color:#fff;font-size:12px;font-weight:bold;background:#1a1a1a;border-left:3px solid #00ff99;padding:4px 6px;margin-bottom:4px}
-.status{font-size:11px;margin-left:6px;color:#888}
-.edit{color:#ffd700;cursor:pointer;margin-left:6px}
-.delete{color:#ff6b6b;cursor:pointer;margin-left:6px}
-.file-link{color:#4fc3f7;text-decoration:underline}
-.img-preview{max-width:200px;border-radius:6px;margin-top:4px;display:block}
-#emojiPicker{position:absolute;bottom:60px;left:10px;display:none;z-index:999}
+#status{padding:6px 10px;font-size:12px;background:#300;color:#ff6b6b}
+#log{height:80vh;overflow:auto;padding:10px;border-bottom:1px solid #222}
+#reply{padding:6px 10px;background:#111;display:none}
+#typing{font-size:12px;color:#888;padding:4px 10px}
+.input{display:flex;background:#000}
+button{background:none;border:none;font-size:20px;padding:10px;color:#00ff99}
+input{flex:1;background:#000;color:#00ff99;border:none;padding:14px}
+.msg{margin-bottom:8px}
+.quote{font-size:12px;color:#fff;background:#1a1a1a;border-left:3px solid #00ff99;padding:4px}
+img{max-width:200px;border-radius:6px;margin-top:4px}
+.small{font-size:11px;color:#888;margin-left:6px;cursor:pointer}
 </style>
 </head>
 
 <body>
 
-<div id="statusBadge">● Offline</div>
-<div id="log">> loading...</div>
-<div id="replyBox"></div>
+<div id="status">● Offline</div>
+<div id="log"></div>
+<div id="reply"></div>
 <div id="typing"></div>
 
-<div class="input-wrap">
-  <button id="emojiBtn">😊</button>
-  <button id="fileBtn">📎</button>
-  <input type="file" id="fileInput" hidden />
-  <input id="input" placeholder="type and press enter" />
+<div class="input">
+<button id="emoji">😊</button>
+<button id="fileBtn">📎</button>
+<input type="file" id="file" hidden>
+<input id="text" placeholder="type & enter">
 </div>
 
-<div id="emojiPicker"></div>
-
 <script>
-let ws, replyTo=null, editId=null;
-const myId=Math.random().toString(36).slice(2,8);
-const myName="User-"+myId;
-
+const ws=new WebSocket((location.protocol==="https:"?"wss://":"ws://")+location.host);
 const log=document.getElementById("log");
-const input=document.getElementById("input");
-const replyBox=document.getElementById("replyBox");
-const typingDiv=document.getElementById("typing");
-const statusBadge=document.getElementById("statusBadge");
-const emojiBtn=document.getElementById("emojiBtn");
-const emojiPicker=document.getElementById("emojiPicker");
-const fileInput=document.getElementById("fileInput");
-const fileBtn=document.getElementById("fileBtn");
+const text=document.getElementById("text");
+const replyBox=document.getElementById("reply");
+const typing=document.getElementById("typing");
+const status=document.getElementById("status");
+const myId=Math.random().toString(36).slice(2,8);
+const me="User-"+myId;
+let replyTo=null,editId=null;
 
-ws=new WebSocket((location.protocol==="https:"?"wss://":"ws://")+location.host);
-
-ws.onopen=()=>{
- statusBadge.textContent="● Online";
- statusBadge.style.background="#002b1a";
- statusBadge.style.color="#00ff99";
-};
-
-ws.onclose=()=>{
- statusBadge.textContent="● Offline";
- statusBadge.style.background="#300";
- statusBadge.style.color="#ff6b6b";
-};
+ws.onopen=()=>{status.textContent="● Online";status.style.background="#002b1a";status.style.color="#00ff99";}
+ws.onclose=()=>{status.textContent="● Offline";status.style.background="#300";status.style.color="#ff6b6b";}
 
 ws.onmessage=e=>{
- const msg=JSON.parse(e.data);
-
- if(msg.type==="history"){log.innerHTML="";msg.data.forEach(renderMessage);}
- if(msg.type==="typing"){typingDiv.textContent=`${msg.user} is typing...`;setTimeout(()=>typingDiv.textContent="",1000);}
- if(msg.type==="message"){renderMessage(msg); if(msg.user!==myName){ws.send(JSON.stringify({type:"seen",id:msg.id}));}}
- if(msg.type==="seen"){const el=document.getElementById("status-"+msg.id);if(el){el.textContent="✓✓";el.style.color="#4fc3f7";}}
- if(msg.type==="edit"){const el=document.getElementById("msg-"+msg.id); if(el) el.innerHTML=msg.text;}
- if(msg.type==="delete"){const el=document.getElementById("wrap-"+msg.id); if(el) el.remove();}
+ const m=JSON.parse(e.data);
+ if(m.type==="history"){log.innerHTML="";m.data.forEach(draw);}
+ if(m.type==="typing"){typing.textContent=m.user+" is typing...";setTimeout(()=>typing.textContent="",1000);}
+ if(m.type==="message"){draw(m); if(m.user!==me)ws.send(JSON.stringify({type:"seen",id:m.id}));}
+ if(m.type==="delete"){const x=document.getElementById("w-"+m.id);if(x)x.remove();}
+ if(m.type==="edit"){document.getElementById("m-"+m.id).innerText=m.text;}
 };
 
-function activateReply(msg){
- replyTo={user:msg.user,text:msg.text};
- replyBox.style.display="block";
- replyBox.textContent=`Replying to ${msg.user}: "${msg.text}"`;
- input.focus();
- emojiPicker.style.display="none";
-}
+function draw(m){
+ const w=document.createElement("div");
+ w.id="w-"+m.id; w.className="msg";
 
-function renderMessage(msg){
- const wrap=document.createElement("div");
- wrap.id="wrap-"+msg.id;
- wrap.className="msg";
+ let press;
+ w.ontouchstart=()=>press=setTimeout(()=>ws.send(JSON.stringify({type:"delete",id:m.id})),600);
+ w.ontouchend=()=>clearTimeout(press);
 
- let longPressTimer=null;
-
- if(msg.replyTo){
+ if(m.replyTo){
   const q=document.createElement("div");
-  q.className="quote";
-  q.textContent=`↪ ${msg.replyTo.user}: ${msg.replyTo.text}`;
-  wrap.appendChild(q);
+  q.className="quote"; q.textContent="↪ "+m.replyTo.user+": "+m.replyTo.text;
+  w.appendChild(q);
  }
 
- const content=document.createElement("div");
- content.id="msg-"+msg.id;
-
- // 🖼️ IMAGE PREVIEW
- if(msg.file && msg.file.startsWith("data:image")){
-   content.innerHTML=`> ${msg.user}:<br>
-     <a href="${msg.file}" target="_blank">
-       <img src="${msg.file}" class="img-preview">
-     </a>`;
- } else if(msg.file){
-   content.innerHTML=`> ${msg.user}: <a class="file-link" href="${msg.file}" target="_blank">${msg.filename}</a>`;
+ const c=document.createElement("div"); c.id="m-"+m.id;
+ if(m.file && m.file.startsWith("data:image")){
+  c.innerHTML=`${m.user}:<br><img src="${m.file}">`;
+ } else if(m.file){
+  c.innerHTML=`${m.user}: <a href="${m.file}" target="_blank">${m.filename}</a>`;
  } else {
-   content.innerHTML= msg.user===myName
-     ? `<span style="color:#4fc3f7">> you: ${msg.text}</span>`
-     : `> ${msg.user}: ${msg.text}`;
+  c.textContent=(m.user===me?"you":"")+": "+m.text;
  }
 
- // allow link click
- content.querySelectorAll("a").forEach(a=>{
-   a.onclick=e=>e.stopPropagation();
- });
+ c.onclick=()=>{replyTo={user:m.user,text:m.text};replyBox.style.display="block";replyBox.textContent="Replying to "+m.user;}
+ w.appendChild(c);
 
- if(msg.user===myName){
-  const s=document.createElement("span"); s.id="status-"+msg.id; s.className="status"; s.textContent="✓"; content.appendChild(s);
-  const e=document.createElement("span"); e.textContent=" ✏️"; e.className="edit"; e.onclick=()=>{input.value=msg.text||""; editId=msg.id;}; content.appendChild(e);
-  const d=document.createElement("span"); d.textContent=" 🗑️"; d.className="delete"; d.onclick=()=>ws.send(JSON.stringify({type:"delete",id:msg.id})); content.appendChild(d);
-
-  // 📱 long press delete
-  wrap.addEventListener("touchstart",()=>{
-    longPressTimer=setTimeout(()=>{
-      ws.send(JSON.stringify({type:"delete",id:msg.id}));
-    },600);
-  });
-  wrap.addEventListener("touchend",()=>clearTimeout(longPressTimer));
+ if(m.user===me){
+  const d=document.createElement("span");
+  d.textContent=" 🗑️"; d.className="small";
+  d.onclick=e=>{e.stopPropagation();ws.send(JSON.stringify({type:"delete",id:m.id}))};
+  c.appendChild(d);
  }
 
- content.onclick=()=>activateReply(msg);
- wrap.appendChild(content);
- log.appendChild(wrap);
+ log.appendChild(w);
  log.scrollTop=log.scrollHeight;
 }
 
-input.addEventListener("keydown",e=>{
- if(e.key==="Enter" && input.value.trim()){
-  if(editId){
-   ws.send(JSON.stringify({type:"edit",id:editId,text:input.value}));
-   editId=null;
-  }else{
-   ws.send(JSON.stringify({
-     type:"message",
-     id:Date.now()+"-"+myId,
-     user:myName,
-     text:input.value,
-     replyTo:replyTo?{...replyTo}:null
-   }));
-  }
-  replyTo=null;
-  replyBox.style.display="none";
-  input.value="";
-  emojiPicker.style.display="none";
- }
-});
-
-input.addEventListener("input",()=>ws.send(JSON.stringify({type:"typing",user:myName})));
-
-fileBtn.onclick=()=>fileInput.click();
-fileInput.onchange=()=>{
- const file=fileInput.files[0];
- const reader=new FileReader();
- reader.onload=()=>ws.send(JSON.stringify({
+text.onkeydown=e=>{
+ if(e.key==="Enter" && text.value.trim()){
+  ws.send(JSON.stringify({
    type:"message",
    id:Date.now()+"-"+myId,
-   user:myName,
-   file:reader.result,
-   filename:file.name
+   user:me,
+   text:text.value,
+   replyTo:replyTo
+  }));
+  text.value=""; replyTo=null; replyBox.style.display="none";
+ }
+};
+
+text.oninput=()=>ws.send(JSON.stringify({type:"typing",user:me}));
+
+emoji.onclick=()=>{text.focus();document.execCommand("insertText",false,"😊");}
+fileBtn.onclick=()=>file.click();
+file.onchange=()=>{
+ const r=new FileReader();
+ r.onload=()=>ws.send(JSON.stringify({
+  type:"message",id:Date.now()+"-"+myId,user:me,file:r.result,filename:file.files[0].name
  }));
- reader.readAsDataURL(file);
+ r.readAsDataURL(file.files[0]);
 };
-
-/* Emoji picker */
-const picker=new EmojiMart.Picker({
- theme:"dark",
- onEmojiSelect:e=>{
-  input.value+=e.native;
-  input.focus();
- }
-});
-emojiPicker.appendChild(picker);
-
-emojiBtn.onclick=(e)=>{
- e.stopPropagation();
- emojiPicker.style.display=emojiPicker.style.display==="none"?"block":"none";
-};
-
-document.addEventListener("click",(e)=>{
- if(!emojiPicker.contains(e.target) && e.target!==emojiBtn){
-  emojiPicker.style.display="none";
- }
-});
 </script>
-
 </body>
 </html>
