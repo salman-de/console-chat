@@ -10,16 +10,18 @@
 
 <style>
 body{margin:0;background:#0e0e0e;color:#00ff99;font-family:monospace}
-#log{height:80vh;overflow-y:auto;padding:10px;border-bottom:1px solid #222}
+#statusBadge{padding:6px 10px;font-size:12px;background:#300;color:#ff6b6b}
+#log{height:78vh;overflow-y:auto;padding:10px;border-bottom:1px solid #222}
 #replyBox{padding:6px 10px;font-size:12px;color:#ccc;background:#111;display:none}
 #typing{padding:4px 10px;font-size:12px;color:#888}
 .input-wrap{display:flex;align-items:center;background:#000}
 #emojiBtn,#fileBtn{background:none;border:none;font-size:20px;padding:10px;cursor:pointer}
 #input{flex:1;padding:14px;background:#000;color:#00ff99;border:none;outline:none}
 .msg{margin-bottom:6px}
-.quote{color:#888;font-size:12px;border-left:2px solid #444;padding-left:6px;margin-bottom:2px}
+.quote{color:#fff;font-size:12px;font-weight:bold;background:#1a1a1a;border-left:3px solid #00ff99;padding:4px 6px;margin-bottom:4px}
 .status{font-size:11px;margin-left:6px;color:#888}
 .edit{color:#ffd700;cursor:pointer;margin-left:6px}
+.delete{color:#ff6b6b;cursor:pointer;margin-left:6px}
 .file-link{color:#4fc3f7;text-decoration:underline}
 #emojiPicker{position:absolute;bottom:60px;left:10px;display:none;z-index:999}
 </style>
@@ -27,6 +29,7 @@ body{margin:0;background:#0e0e0e;color:#00ff99;font-family:monospace}
 
 <body>
 
+<div id="statusBadge">● Offline</div>
 <div id="log">> loading...</div>
 <div id="replyBox"></div>
 <div id="typing"></div>
@@ -49,8 +52,25 @@ const log=document.getElementById("log");
 const input=document.getElementById("input");
 const replyBox=document.getElementById("replyBox");
 const typingDiv=document.getElementById("typing");
+const statusBadge=document.getElementById("statusBadge");
+const emojiBtn=document.getElementById("emojiBtn");
+const emojiPicker=document.getElementById("emojiPicker");
+const fileInput=document.getElementById("fileInput");
+const fileBtn=document.getElementById("fileBtn");
 
 ws=new WebSocket((location.protocol==="https:"?"wss://":"ws://")+location.host);
+
+ws.onopen=()=>{
+ statusBadge.textContent="● Online";
+ statusBadge.style.background="#002b1a";
+ statusBadge.style.color="#00ff99";
+};
+
+ws.onclose=()=>{
+ statusBadge.textContent="● Offline";
+ statusBadge.style.background="#300";
+ statusBadge.style.color="#ff6b6b";
+};
 
 ws.onmessage=e=>{
  const msg=JSON.parse(e.data);
@@ -59,14 +79,16 @@ ws.onmessage=e=>{
  if(msg.type==="typing"){typingDiv.textContent=`${msg.user} is typing...`;setTimeout(()=>typingDiv.textContent="",1000);}
  if(msg.type==="message"){renderMessage(msg); if(msg.user!==myName){ws.send(JSON.stringify({type:"seen",id:msg.id}));}}
  if(msg.type==="seen"){const el=document.getElementById("status-"+msg.id);if(el){el.textContent="✓✓";el.style.color="#4fc3f7";}}
- if(msg.type==="edit"){document.getElementById("msg-"+msg.id).innerHTML=msg.text;}
-}
+ if(msg.type==="edit"){const el=document.getElementById("msg-"+msg.id); if(el) el.innerHTML=msg.text;}
+ if(msg.type==="delete"){const el=document.getElementById("wrap-"+msg.id); if(el) el.remove();}
+};
 
 function activateReply(msg){
  replyTo={user:msg.user,text:msg.text};
  replyBox.style.display="block";
  replyBox.textContent=`Replying to ${msg.user}: "${msg.text}"`;
  input.focus();
+ emojiPicker.style.display="none";
 }
 
 function renderMessage(msg){
@@ -89,6 +111,7 @@ function renderMessage(msg){
  if(msg.user===myName){
   const s=document.createElement("span"); s.id="status-"+msg.id; s.className="status"; s.textContent="✓"; content.appendChild(s);
   const e=document.createElement("span"); e.textContent=" ✏️"; e.className="edit"; e.onclick=()=>{input.value=msg.text; editId=msg.id;}; content.appendChild(e);
+  const d=document.createElement("span"); d.textContent=" 🗑️"; d.className="delete"; d.onclick=()=>ws.send(JSON.stringify({type:"delete",id:msg.id})); content.appendChild(d);
  }
 
  content.onclick=()=>activateReply(msg);
@@ -103,9 +126,18 @@ input.addEventListener("keydown",e=>{
    ws.send(JSON.stringify({type:"edit",id:editId,text:input.value}));
    editId=null;
   }else{
-   ws.send(JSON.stringify({type:"message",id:Date.now()+"-"+myId,user:myName,text:input.value,replyTo:replyTo?{...replyTo}:null}));
+   ws.send(JSON.stringify({
+     type:"message",
+     id:Date.now()+"-"+myId,
+     user:myName,
+     text:input.value,
+     replyTo:replyTo?{...replyTo}:null
+   }));
   }
-  replyTo=null; replyBox.style.display="none"; input.value="";
+  replyTo=null;
+  replyBox.style.display="none";
+  input.value="";
+  emojiPicker.style.display="none";
  }
 });
 
@@ -115,14 +147,37 @@ fileBtn.onclick=()=>fileInput.click();
 fileInput.onchange=()=>{
  const file=fileInput.files[0];
  const reader=new FileReader();
- reader.onload=()=>ws.send(JSON.stringify({type:"message",id:Date.now()+"-"+myId,user:myName,file:reader.result,filename:file.name}));
+ reader.onload=()=>ws.send(JSON.stringify({
+   type:"message",
+   id:Date.now()+"-"+myId,
+   user:myName,
+   file:reader.result,
+   filename:file.name
+ }));
  reader.readAsDataURL(file);
 };
 
-/* Emoji */
-const picker=new EmojiMart.Picker({theme:"dark",onEmojiSelect:e=>{input.value+=e.native;input.focus();}});
+/* Emoji picker */
+const picker=new EmojiMart.Picker({
+ theme:"dark",
+ onEmojiSelect:e=>{
+  input.value+=e.native;
+  input.focus();
+ }
+});
 emojiPicker.appendChild(picker);
-emojiBtn.onclick=()=>emojiPicker.style.display=emojiPicker.style.display==="none"?"block":"none";
+
+emojiBtn.onclick=(e)=>{
+ e.stopPropagation();
+ emojiPicker.style.display=emojiPicker.style.display==="none"?"block":"none";
+};
+
+/* hide emoji picker on outside click */
+document.addEventListener("click",(e)=>{
+ if(!emojiPicker.contains(e.target) && e.target!==emojiBtn){
+  emojiPicker.style.display="none";
+ }
+});
 </script>
 
 </body>
