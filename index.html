@@ -1,195 +1,124 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Console Chat</title>
 
 <style>
-body{margin:0;background:#0e0e0e;color:#eaeaea;font-family:sans-serif}
-#log{height:80vh;overflow:auto;padding:10px}
-.msg{margin-bottom:14px;position:relative;padding:6px 8px;border-radius:6px}
-.msg:hover{background:#151515}
-.user{font-weight:600}
-.text{margin-top:2px}
-.quote{
-  font-size:12px;
-  background:#1a1a1a;
-  border-left:3px solid #00ff99;
-  padding:4px 6px;
-  margin-bottom:4px;
-  color:#ccc;
-}
-.reacts{margin-top:4px;font-size:13px;color:#aaa}
-.reacts span{margin-right:6px}
-
-/* hover reaction bar (PC) */
-.hover-bar{
-  display:none;
-  position:absolute;
-  top:-34px;
-  left:6px;
-  background:#111;
-  padding:6px 10px;
-  border-radius:18px;
-  gap:8px;
-}
-.hover-bar span{cursor:pointer;font-size:18px}
-.msg:hover .hover-bar{display:flex}
-
-/* mobile picker */
-#picker{
-  display:none;
-  position:fixed;
-  bottom:90px;
-  left:50%;
-  transform:translateX(-50%);
-  background:#111;
-  padding:10px;
-  border-radius:18px;
-  z-index:999;
-}
-#picker span{font-size:24px;margin:8px;cursor:pointer}
-
-/* input */
-#inputWrap{display:flex;border-top:1px solid #222}
-#text{flex:1;padding:12px;background:#000;color:#fff;border:none;outline:none}
+body{margin:0;background:#0e0e0e;color:#00ff99;font-family:monospace}
+#status{padding:6px 10px;font-size:12px;background:#300;color:#ff6b6b}
+#log{height:80vh;overflow:auto;padding:10px;border-bottom:1px solid #222}
+#reply{padding:6px 10px;background:#111;display:none}
+#typing{font-size:12px;color:#888;padding:4px 10px}
+.input{display:flex;background:#000}
+button{background:none;border:none;font-size:20px;padding:10px;color:#00ff99}
+input{flex:1;background:#000;color:#00ff99;border:none;padding:14px}
+.msg{margin-bottom:8px}
+.quote{font-size:12px;color:#fff;background:#1a1a1a;border-left:3px solid #00ff99;padding:4px}
+img{max-width:200px;border-radius:6px;margin-top:4px}
+.small{font-size:11px;color:#888;margin-left:6px;cursor:pointer}
 </style>
 </head>
 
 <body>
 
+<div id="status">● Offline</div>
 <div id="log"></div>
+<div id="reply"></div>
+<div id="typing"></div>
 
-<div id="inputWrap">
-  <input id="text" placeholder="Type & enter">
+<div class="input">
+<button id="emoji">😊</button>
+<button id="fileBtn">📎</button>
+<input type="file" id="file" hidden>
+<input id="text" placeholder="type & enter">
 </div>
-
-<div id="picker">👍 ❤️ 😂 😍 😮 😢 😡</div>
 
 <script>
 const ws=new WebSocket((location.protocol==="https:"?"wss://":"ws://")+location.host);
 const log=document.getElementById("log");
 const text=document.getElementById("text");
-const picker=document.getElementById("picker");
-
+const replyBox=document.getElementById("reply");
+const typing=document.getElementById("typing");
+const status=document.getElementById("status");
 const myId=Math.random().toString(36).slice(2,8);
 const me="User-"+myId;
+let replyTo=null,editId=null;
 
-let replyTo=null;
-let reactTarget=null;
-let pressTimer=null;
+ws.onopen=()=>{status.textContent="● Online";status.style.background="#002b1a";status.style.color="#00ff99";}
+ws.onclose=()=>{status.textContent="● Offline";status.style.background="#300";status.style.color="#ff6b6b";}
 
 ws.onmessage=e=>{
- const data=JSON.parse(e.data);
- if(data.type==="history"){log.innerHTML="";data.data.forEach(render);}
- if(data.type==="message") render(data);
- if(data.type==="reaction") updateReacts(data.message);
+ const m=JSON.parse(e.data);
+ if(m.type==="history"){log.innerHTML="";m.data.forEach(draw);}
+ if(m.type==="typing"){typing.textContent=m.user+" is typing...";setTimeout(()=>typing.textContent="",1000);}
+ if(m.type==="message"){draw(m); if(m.user!==me)ws.send(JSON.stringify({type:"seen",id:m.id}));}
+ if(m.type==="delete"){const x=document.getElementById("w-"+m.id);if(x)x.remove();}
+ if(m.type==="edit"){document.getElementById("m-"+m.id).innerText=m.text;}
 };
 
-function render(m){
- const d=document.createElement("div");
- d.className="msg";
- d.id="m-"+m.id;
+function draw(m){
+ const w=document.createElement("div");
+ w.id="w-"+m.id; w.className="msg";
+
+ let press;
+ w.ontouchstart=()=>press=setTimeout(()=>ws.send(JSON.stringify({type:"delete",id:m.id})),600);
+ w.ontouchend=()=>clearTimeout(press);
 
  if(m.replyTo){
   const q=document.createElement("div");
-  q.className="quote";
-  q.textContent=`Reply to ${m.replyTo.user}: ${m.replyTo.text}`;
-  d.appendChild(q);
+  q.className="quote"; q.textContent="↪ "+m.replyTo.user+": "+m.replyTo.text;
+  w.appendChild(q);
  }
 
- const u=document.createElement("div");
- u.className="user";
- u.textContent=m.user;
- d.appendChild(u);
+ const c=document.createElement("div"); c.id="m-"+m.id;
+ if(m.file && m.file.startsWith("data:image")){
+  c.innerHTML=`${m.user}:<br><img src="${m.file}">`;
+ } else if(m.file){
+  c.innerHTML=`${m.user}: <a href="${m.file}" target="_blank">${m.filename}</a>`;
+ } else {
+  c.textContent=(m.user===me?"you":"")+": "+m.text;
+ }
 
- const t=document.createElement("div");
- t.className="text";
- t.textContent=m.text;
- d.appendChild(t);
+ c.onclick=()=>{replyTo={user:m.user,text:m.text};replyBox.style.display="block";replyBox.textContent="Replying to "+m.user;}
+ w.appendChild(c);
 
- // PC hover reactions
- const hover=document.createElement("div");
- hover.className="hover-bar";
- hover.innerHTML="👍 ❤️ 😂 😍 😮 😢 😡";
- hover.onclick=e=>{
-  if(e.target.tagName==="SPAN"){
-    sendReaction(m.id,e.target.textContent,d);
-  }
- };
- d.appendChild(hover);
+ if(m.user===me){
+  const d=document.createElement("span");
+  d.textContent=" 🗑️"; d.className="small";
+  d.onclick=e=>{e.stopPropagation();ws.send(JSON.stringify({type:"delete",id:m.id}))};
+  c.appendChild(d);
+ }
 
- // reaction strip
- const r=document.createElement("div");
- r.className="reacts";
- r.id="r-"+m.id;
- d.appendChild(r);
-
- // reply on click
- d.onclick=()=>{
-   replyTo={id:m.id,user:m.user,text:m.text};
- };
-
- // mobile long press
- d.addEventListener("touchstart",()=>{
-  pressTimer=setTimeout(()=>{
-    reactTarget=m.id;
-    picker.style.display="block";
-  },500);
- });
- d.addEventListener("touchend",()=>clearTimeout(pressTimer));
-
- log.appendChild(d);
+ log.appendChild(w);
  log.scrollTop=log.scrollHeight;
- updateReacts(m);
 }
-
-function sendReaction(id,emoji,box){
- ws.send(JSON.stringify({type:"reaction",id,emoji,user:me}));
- const anim=document.createElement("div");
- anim.textContent=emoji;
- anim.style.position="absolute";
- anim.style.bottom="10px";
- anim.style.left="10px";
- anim.style.opacity="0.8";
- box.appendChild(anim);
- setTimeout(()=>anim.remove(),500);
-}
-
-function updateReacts(m){
- const r=document.getElementById("r-"+m.id);
- if(!r||!m.reactions) return;
- let html="";
- Object.entries(m.reactions).forEach(([e,u])=>{
-   if(u.length) html+=`${e} ${u.length} `;
- });
- r.innerHTML=html;
-}
-
-picker.onclick=e=>{
- const emoji=e.target.textContent;
- if(!emoji||!reactTarget) return;
- const box=document.getElementById("m-"+reactTarget);
- sendReaction(reactTarget,emoji,box);
- picker.style.display="none";
- reactTarget=null;
-};
 
 text.onkeydown=e=>{
- if(e.key==="Enter" && text.value){
+ if(e.key==="Enter" && text.value.trim()){
   ws.send(JSON.stringify({
-    type:"message",
-    id:Date.now()+"-"+myId,
-    user:me,
-    text:text.value,
-    replyTo:replyTo
+   type:"message",
+   id:Date.now()+"-"+myId,
+   user:me,
+   text:text.value,
+   replyTo:replyTo
   }));
-  replyTo=null;
-  text.value="";
+  text.value=""; replyTo=null; replyBox.style.display="none";
  }
 };
-</script>
 
+text.oninput=()=>ws.send(JSON.stringify({type:"typing",user:me}));
+
+emoji.onclick=()=>{text.focus();document.execCommand("insertText",false,"😊");}
+fileBtn.onclick=()=>file.click();
+file.onchange=()=>{
+ const r=new FileReader();
+ r.onload=()=>ws.send(JSON.stringify({
+  type:"message",id:Date.now()+"-"+myId,user:me,file:r.result,filename:file.files[0].name
+ }));
+ r.readAsDataURL(file.files[0]);
+};
+</script>
 </body>
 </html>
