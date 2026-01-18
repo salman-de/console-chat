@@ -16,6 +16,8 @@ button{background:none;border:none;font-size:20px;padding:10px;color:#00ff99;cur
 input{flex:1;background:#000;color:#00ff99;border:none;padding:14px}
 .msg{margin-bottom:8px}
 .quote{font-size:12px;color:#ccffee;background:#1a1a1a;border-left:3px solid #00ff99;padding:4px}
+.username{font-weight:bold}
+.message{margin-left:4px}
 img{max-width:200px;border-radius:6px;margin-top:4px}
 .small{font-size:11px;color:#66ffcc;margin-left:6px}
 #picker{display:none;background:#111;padding:6px;border-top:1px solid #222}
@@ -57,22 +59,33 @@ const myId=Math.random().toString(36).slice(2,8);
 const me="User-"+myId;
 let replyTo=null;
 
-// 🔹 CYAN + GREEN ONLY PALETTE
-const palette=[
- "#00ff99","#00ffaa","#00ffcc","#00ffff",
- "#33ffcc","#33ff99","#66ffcc","#66ffff"
+// 🎨 PALETTES
+const usernamePalette=[
+ "#00ffff","#66ffff","#33ffcc","#00ffcc"
 ];
-const userColors={};
+const messagePalette=[
+ "#00ff99","#33ff99","#66ffcc","#00ffaa"
+];
 
-function getColor(user){
- if(!userColors[user]){
-  userColors[user]=palette[Object.keys(userColors).length % palette.length];
+// 🔹 HASH BASED COLOR (USERNAME)
+function hashColor(user,palette){
+ let hash=0;
+ for(let i=0;i<user.length;i++){
+  hash=user.charCodeAt(i)+((hash<<5)-hash);
  }
- return userColors[user];
+ return palette[Math.abs(hash)%palette.length];
 }
 
-ws.onopen=()=>{status.textContent="● Online";status.style.background="#002b1a";status.style.color="#00ff99";}
-ws.onclose=()=>{status.textContent="● Offline";status.style.background="#300";status.style.color="#ff6b6b";}
+ws.onopen=()=>{
+ status.textContent="● Online";
+ status.style.background="#002b1a";
+ status.style.color="#00ff99";
+};
+ws.onclose=()=>{
+ status.textContent="● Offline";
+ status.style.background="#300";
+ status.style.color="#ff6b6b";
+};
 
 ws.onmessage=e=>{
  const m=JSON.parse(e.data);
@@ -108,16 +121,20 @@ function draw(m){
   w.appendChild(q);
  }
 
+ const uColor=hashColor(m.user,usernamePalette);
+ const mColor=hashColor(m.user,messagePalette);
+
  const c=document.createElement("div");
- c.id="m-"+m.id;
- c.style.color=getColor(m.user);
 
  if(m.file && m.file.startsWith("data:image")){
-  c.innerHTML=`<b>${m.user}</b>:<br><img src="${m.file}">`;
+  c.innerHTML=`<span class="username" style="color:${uColor}">${m.user}</span>:<br>
+               <img src="${m.file}">`;
  }else if(m.file){
-  c.innerHTML=`<b>${m.user}</b>: <a href="${m.file}" target="_blank">${m.filename}</a>`;
+  c.innerHTML=`<span class="username" style="color:${uColor}">${m.user}</span>:
+               <a href="${m.file}" target="_blank">${m.filename}</a>`;
  }else{
-  c.innerHTML=`<b>${m.user}</b>: ${m.text}`;
+  c.innerHTML=`<span class="username" style="color:${uColor}">${m.user}</span>:
+               <span class="message" style="color:${mColor}">${m.text}</span>`;
  }
 
  c.onclick=()=>{
