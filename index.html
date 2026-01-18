@@ -22,6 +22,11 @@ img{max-width:200px;border-radius:6px;margin-top:4px}
 .small{font-size:11px;color:#66ffcc;margin-left:6px}
 #picker{display:none;background:#111;padding:6px;border-top:1px solid #222}
 #picker span{padding:6px;font-size:20px;cursor:pointer;display:inline-block}
+
+/* 🖥️ PC ONLY: message text 12px */
+@media (min-width: 768px){
+  .message{font-size:12px;}
+}
 </style>
 </head>
 
@@ -59,15 +64,11 @@ const myId=Math.random().toString(36).slice(2,8);
 const me="User-"+myId;
 let replyTo=null;
 
-// 🎨 PALETTES
-const usernamePalette=[
- "#00ffff","#66ffff","#33ffcc","#00ffcc"
-];
-const messagePalette=[
- "#00ff99","#33ff99","#66ffcc","#00ffaa"
-];
+// 🎨 CYAN (username) + GREEN (message) palettes
+const usernamePalette=["#00ffff","#66ffff","#33ffcc","#00ffcc"];
+const messagePalette=["#00ff99","#33ff99","#66ffcc","#00ffaa"];
 
-// 🔹 HASH BASED COLOR (USERNAME)
+// 🔹 Hash-based color (stable & different)
 function hashColor(user,palette){
  let hash=0;
  for(let i=0;i<user.length;i++){
