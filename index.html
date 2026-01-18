@@ -6,18 +6,18 @@
 <title>Console Chat</title>
 
 <style>
-body{margin:0;background:#0e0e0e;color:#00ff99;font-family:monospace}
+body{margin:0;background:#0e0e0e;font-family:monospace}
 #status{padding:6px 10px;font-size:12px;background:#300;color:#ff6b6b}
 #log{height:78vh;overflow:auto;padding:10px;border-bottom:1px solid #222}
-#reply{padding:6px 10px;background:#111;display:none}
+#reply{padding:6px 10px;background:#111;color:#aaa;display:none}
 #typing{font-size:12px;color:#888;padding:4px 10px}
 .input{display:flex;background:#000;align-items:center}
-button{background:none;border:none;font-size:20px;padding:10px;color:#00ff99;cursor:pointer}
+button{background:none;border:none;font-size:20px;padding:10px;cursor:pointer}
 input{flex:1;background:#000;color:#00ff99;border:none;padding:14px}
 .msg{margin-bottom:8px}
 .quote{font-size:12px;color:#fff;background:#1a1a1a;border-left:3px solid #00ff99;padding:4px}
 img{max-width:200px;border-radius:6px;margin-top:4px}
-.small{font-size:11px;color:#888;margin-left:6px}
+.small{font-size:11px;color:#777;margin-left:6px}
 #picker{display:none;background:#111;padding:6px;border-top:1px solid #222}
 #picker span{padding:6px;font-size:20px;cursor:pointer;display:inline-block}
 </style>
@@ -30,10 +30,12 @@ img{max-width:200px;border-radius:6px;margin-top:4px}
 <div id="reply"></div>
 <div id="typing"></div>
 
+<!-- EMOJI PICKER -->
 <div id="picker">
- <span>😀</span><span>😁</span><span>😂</span><span>🤣</span>
- <span>😍</span><span>😎</span><span>😢</span><span>😡</span>
- <span>👍</span><span>👎</span><span>❤️</span><span>🔥</span><span>🎉</span>
+ 😀 😁 😂 🤣 😃 😄 😅 😆 😉 😊 😋 😎 😍 😘  
+ 😐 😑 😶 🙄 😏 😣 😥 😢 😭 😡 🤬  
+ 👍 👎 👌 🙏 🤝 💪 👀  
+ ❤️ 💔 🔥 🎉 💯 🚀
 </div>
 
 <div class="input">
@@ -56,8 +58,17 @@ const myId=Math.random().toString(36).slice(2,8);
 const me="User-"+myId;
 let replyTo=null;
 
-ws.onopen=()=>{status.textContent="● Online";status.style.background="#002b1a";}
-ws.onclose=()=>{status.textContent="● Offline";status.style.background="#300";}
+// 🔹 USER COLOR MAP
+const userColors={};
+function getColor(user){
+ if(!userColors[user]){
+  userColors[user]="#"+Math.floor(Math.random()*16777215).toString(16).padStart(6,"0");
+ }
+ return userColors[user];
+}
+
+ws.onopen=()=>{status.textContent="● Online";status.style.background="#002b1a";status.style.color="#00ff99";}
+ws.onclose=()=>{status.textContent="● Offline";status.style.background="#300";status.style.color="#ff6b6b";}
 
 ws.onmessage=e=>{
  const m=JSON.parse(e.data);
@@ -83,7 +94,8 @@ ws.onmessage=e=>{
 
 function draw(m){
  const w=document.createElement("div");
- w.id="w-"+m.id; w.className="msg";
+ w.id="w-"+m.id; 
+ w.className="msg";
 
  if(m.replyTo){
   const q=document.createElement("div");
@@ -94,13 +106,14 @@ function draw(m){
 
  const c=document.createElement("div");
  c.id="m-"+m.id;
+ c.style.color=getColor(m.user);
 
  if(m.file && m.file.startsWith("data:image")){
-  c.innerHTML=`${m.user}:<br><img src="${m.file}">`;
+  c.innerHTML=`<b>${m.user}</b>:<br><img src="${m.file}">`;
  }else if(m.file){
-  c.innerHTML=`${m.user}: <a href="${m.file}" target="_blank">${m.filename}</a>`;
+  c.innerHTML=`<b>${m.user}</b>: <a href="${m.file}" target="_blank">${m.filename}</a>`;
  }else{
-  c.textContent=(m.user===me?"you":m.user)+": "+m.text;
+  c.innerHTML=`<b>${m.user}</b>: ${m.text}`;
  }
 
  c.onclick=()=>{
@@ -145,7 +158,7 @@ emoji.onclick=()=>{
 };
 
 picker.onclick=e=>{
- if(e.target.tagName==="SPAN"){
+ if(e.target.nodeType===3){
   text.value+=e.target.textContent;
   picker.style.display="none";
   text.focus();
