@@ -8,16 +8,18 @@
 <style>
 body{margin:0;background:#0e0e0e;color:#00ff99;font-family:monospace}
 #status{padding:6px 10px;font-size:12px;background:#300;color:#ff6b6b}
-#log{height:80vh;overflow:auto;padding:10px;border-bottom:1px solid #222}
+#log{height:78vh;overflow:auto;padding:10px;border-bottom:1px solid #222}
 #reply{padding:6px 10px;background:#111;display:none}
 #typing{font-size:12px;color:#888;padding:4px 10px}
-.input{display:flex;background:#000}
-button{background:none;border:none;font-size:20px;padding:10px;color:#00ff99}
+.input{display:flex;background:#000;align-items:center}
+button{background:none;border:none;font-size:20px;padding:10px;color:#00ff99;cursor:pointer}
 input{flex:1;background:#000;color:#00ff99;border:none;padding:14px}
 .msg{margin-bottom:8px}
 .quote{font-size:12px;color:#fff;background:#1a1a1a;border-left:3px solid #00ff99;padding:4px}
 img{max-width:200px;border-radius:6px;margin-top:4px}
-.small{font-size:11px;color:#888;margin-left:6px;cursor:pointer}
+.small{font-size:11px;color:#888;margin-left:6px}
+#picker{display:none;background:#111;padding:6px;border-top:1px solid #222}
+#picker span{padding:6px;font-size:20px;cursor:pointer;display:inline-block}
 </style>
 </head>
 
@@ -27,6 +29,12 @@ img{max-width:200px;border-radius:6px;margin-top:4px}
 <div id="log"></div>
 <div id="reply"></div>
 <div id="typing"></div>
+
+<div id="picker">
+ <span>😀</span><span>😁</span><span>😂</span><span>🤣</span>
+ <span>😍</span><span>😎</span><span>😢</span><span>😡</span>
+ <span>👍</span><span>👎</span><span>❤️</span><span>🔥</span><span>🎉</span>
+</div>
 
 <div class="input">
 <button id="emoji">😊</button>
@@ -42,53 +50,73 @@ const text=document.getElementById("text");
 const replyBox=document.getElementById("reply");
 const typing=document.getElementById("typing");
 const status=document.getElementById("status");
+const picker=document.getElementById("picker");
+
 const myId=Math.random().toString(36).slice(2,8);
 const me="User-"+myId;
-let replyTo=null,editId=null;
+let replyTo=null;
 
-ws.onopen=()=>{status.textContent="● Online";status.style.background="#002b1a";status.style.color="#00ff99";}
-ws.onclose=()=>{status.textContent="● Offline";status.style.background="#300";status.style.color="#ff6b6b";}
+ws.onopen=()=>{status.textContent="● Online";status.style.background="#002b1a";}
+ws.onclose=()=>{status.textContent="● Offline";status.style.background="#300";}
 
 ws.onmessage=e=>{
  const m=JSON.parse(e.data);
+
  if(m.type==="history"){log.innerHTML="";m.data.forEach(draw);}
- if(m.type==="typing"){typing.textContent=m.user+" is typing...";setTimeout(()=>typing.textContent="",1000);}
- if(m.type==="message"){draw(m); if(m.user!==me)ws.send(JSON.stringify({type:"seen",id:m.id}));}
- if(m.type==="delete"){const x=document.getElementById("w-"+m.id);if(x)x.remove();}
- if(m.type==="edit"){document.getElementById("m-"+m.id).innerText=m.text;}
+ if(m.type==="typing"){
+  typing.textContent=m.user+" is typing...";
+  setTimeout(()=>typing.textContent="",1000);
+ }
+ if(m.type==="message"){
+  draw(m);
+  if(m.user!==me) ws.send(JSON.stringify({type:"seen",id:m.id}));
+ }
+ if(m.type==="seen"){
+  const s=document.getElementById("seen-"+m.id);
+  if(s) s.textContent=" ✓✓";
+ }
+ if(m.type==="delete"){
+  const x=document.getElementById("w-"+m.id);
+  if(x) x.remove();
+ }
 };
 
 function draw(m){
  const w=document.createElement("div");
  w.id="w-"+m.id; w.className="msg";
 
- let press;
- w.ontouchstart=()=>press=setTimeout(()=>ws.send(JSON.stringify({type:"delete",id:m.id})),600);
- w.ontouchend=()=>clearTimeout(press);
-
  if(m.replyTo){
   const q=document.createElement("div");
-  q.className="quote"; q.textContent="↪ "+m.replyTo.user+": "+m.replyTo.text;
+  q.className="quote";
+  q.textContent="↪ "+m.replyTo.user+": "+m.replyTo.text;
   w.appendChild(q);
  }
 
- const c=document.createElement("div"); c.id="m-"+m.id;
+ const c=document.createElement("div");
+ c.id="m-"+m.id;
+
  if(m.file && m.file.startsWith("data:image")){
   c.innerHTML=`${m.user}:<br><img src="${m.file}">`;
- } else if(m.file){
+ }else if(m.file){
   c.innerHTML=`${m.user}: <a href="${m.file}" target="_blank">${m.filename}</a>`;
- } else {
-  c.textContent=(m.user===me?"you":"")+": "+m.text;
+ }else{
+  c.textContent=(m.user===me?"you":m.user)+": "+m.text;
  }
 
- c.onclick=()=>{replyTo={user:m.user,text:m.text};replyBox.style.display="block";replyBox.textContent="Replying to "+m.user;}
+ c.onclick=()=>{
+  replyTo={user:m.user,text:m.text};
+  replyBox.style.display="block";
+  replyBox.textContent="Replying to "+m.user;
+ };
+
  w.appendChild(c);
 
  if(m.user===me){
-  const d=document.createElement("span");
-  d.textContent=" 🗑️"; d.className="small";
-  d.onclick=e=>{e.stopPropagation();ws.send(JSON.stringify({type:"delete",id:m.id}))};
-  c.appendChild(d);
+  const seen=document.createElement("span");
+  seen.id="seen-"+m.id;
+  seen.className="small";
+  seen.textContent=" ✓";
+  w.appendChild(seen);
  }
 
  log.appendChild(w);
@@ -104,18 +132,35 @@ text.onkeydown=e=>{
    text:text.value,
    replyTo:replyTo
   }));
-  text.value=""; replyTo=null; replyBox.style.display="none";
+  text.value="";
+  replyTo=null;
+  replyBox.style.display="none";
  }
 };
 
 text.oninput=()=>ws.send(JSON.stringify({type:"typing",user:me}));
 
-emoji.onclick=()=>{text.focus();document.execCommand("insertText",false,"😊");}
+emoji.onclick=()=>{
+ picker.style.display=picker.style.display==="block"?"none":"block";
+};
+
+picker.onclick=e=>{
+ if(e.target.tagName==="SPAN"){
+  text.value+=e.target.textContent;
+  picker.style.display="none";
+  text.focus();
+ }
+};
+
 fileBtn.onclick=()=>file.click();
 file.onchange=()=>{
  const r=new FileReader();
  r.onload=()=>ws.send(JSON.stringify({
-  type:"message",id:Date.now()+"-"+myId,user:me,file:r.result,filename:file.files[0].name
+  type:"message",
+  id:Date.now()+"-"+myId,
+  user:me,
+  file:r.result,
+  filename:file.files[0].name
  }));
  r.readAsDataURL(file.files[0]);
 };
